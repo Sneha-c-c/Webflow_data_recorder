@@ -1,0 +1,82 @@
+[
+  {
+    "id": "session_1742276245",
+    "website": "agoda.com",
+    "start_time": 1742276245.207205,
+    "end_time": 1742276364.216525,
+    "page_count": 77,
+    "description": "agoda_searchhotelFlows"
+  },
+  {
+    "id": "session_1742290849",
+    "website": "agoda.com",
+    "start_time": 1742290849.050447,
+    "end_time": null,
+    "page_count": 0,
+    "description": ""
+  },
+  {
+    "id": "session_1742296091",
+    "website": "https://www.makemytrip.com/",
+    "start_time": 1742296091.4608781,
+    "end_time": null,
+    "page_count": 9,
+    "description": "makemytrip_bookhotel"
+  },
+  {
+    "id": "session_1742360940",
+    "website": "makemytrip.com",
+    "start_time": 1742360940.591109,
+    "end_time": 1742361154.6589582,
+    "page_count": 16,
+    "description": "BookHotelsAndBus"
+  },
+  {
+    "id": "session_1742362077",
+    "website": "agoda.com",
+    "start_time": 1742362077.215909,
+    "end_time": 1742362126.139135,
+    "page_count": 2,
+    "description": ""
+  },
+  {
+    "id": "session_1742362321",
+    "website": "https://makemytrip.com/",
+    "start_time": 1742362321.079177,
+    "end_time": 1742362450.443692,
+    "page_count": 6,
+    "description": ""
+  },
+  {
+    "id": "session_1742363303",
+    "website": "makemytrip.com",
+    "start_time": 1742363303.548476,
+    "end_time": 1742363419.456009,
+    "page_count": 7,
+    "description": ""
+  },
+  {
+    "id": "session_1742363466",
+    "website": "agoda.com",
+    "start_time": 1742363466.494736,
+    "end_time": 1742363537.728214,
+    "page_count": 87,
+    "description": ""
+  },
+  {
+    "id": "session_1742449953",
+    "website": "https://www.globalsqa.com/angularJs-protractor/BankingProject/#/login",
+    "start_time": 1742449953.2587368,
+    "end_time": 1742450026.8125482,
+    "page_count": 27,
+    "description": "Bank Manager Flow"
+  },
+  {
+    "id": "session_1742450136",
+    "website": "https://www.globalsqa.com/angularJs-protractor/BankingProject/#/login",
+    "start_time": 1742450136.4941702,
+    "end_time": 1742450174.596598,
+    "page_count": 16,
+    "description": "Customer Flow"
+  }
+]
