@@ -5,15 +5,20 @@ from datetime import datetime
 from database.graph_db import driver
 from database.vector_db import PG_CONN, PG_CURSOR
 
+
 class CaptureSession:
-    def __init__(self, id=None, website=None, start_time=None, end_time=None, page_count=0, description=""):
+    def __init__(self, id=None, website=None, start_time=None, end_time=None, page_count=0,
+                 forms_count=0, total_fields=0, named_fields=0, description=""):
         self.id = id or f"session_{int(time.time())}"
         self.website = website
         self.start_time = start_time or time.time()
         self.end_time = end_time
         self.page_count = page_count
+        self.forms_count = forms_count
+        self.total_fields = total_fields
+        self.named_fields = named_fields
         self.description = description
-    
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -21,9 +26,12 @@ class CaptureSession:
             "start_time": self.start_time,
             "end_time": self.end_time,
             "page_count": self.page_count,
+            "forms_count": self.forms_count,
+            "total_fields": self.total_fields,
+            "named_fields": self.named_fields,
             "description": self.description
         }
-    
+
     @classmethod
     def from_dict(cls, data):
         return cls(
@@ -32,19 +40,22 @@ class CaptureSession:
             start_time=data.get("start_time"),
             end_time=data.get("end_time"),
             page_count=data.get("page_count", 0),
+            forms_count=data.get("forms_count", 0),
+            total_fields=data.get("total_fields", 0),
+            named_fields=data.get("named_fields", 0),
             description=data.get("description", "")
         )
-    
+
     @property
     def formatted_start_time(self):
         return datetime.fromtimestamp(self.start_time).strftime("%Y-%m-%d %H:%M:%S")
-    
+
     @property
     def formatted_end_time(self):
         if self.end_time:
             return datetime.fromtimestamp(self.end_time).strftime("%Y-%m-%d %H:%M:%S")
         return "Active"
-    
+
     @property
     def duration(self):
         if self.end_time:
@@ -64,42 +75,46 @@ class CaptureSession:
         """Return date as a datetime.date object for filtering"""
         return datetime.fromtimestamp(self.start_time).date()
 
+
 class HistoryManager:
     def __init__(self, history_file="./capture_history.json"):
         self.history_file = history_file
         self.current_session = None
         self.sessions = []
         self.load_history()
-        
+
         # Create sample data if no sessions exist
         if not self.sessions:
             self.create_sample_data()
-    
+
     def load_history(self):
         try:
             if os.path.exists(self.history_file):
                 with open(self.history_file, 'r') as f:
                     data = json.load(f)
-                self.sessions = [CaptureSession.from_dict(session) for session in data]
-                print(f"Loaded {len(self.sessions)} sessions from history file")
+                self.sessions = [CaptureSession.from_dict(
+                    session) for session in data]
+                print(
+                    f"Loaded {len(self.sessions)} sessions from history file")
             else:
                 print(f"History file not found at: {self.history_file}")
         except Exception as e:
             print(f"Error loading history: {e}")
             self.sessions = []
-    
+
     def save_history(self):
         try:
             with open(self.history_file, 'w') as f:
-                json.dump([session.to_dict() for session in self.sessions], f, indent=2)
+                json.dump([session.to_dict()
+                          for session in self.sessions], f, indent=2)
             print(f"Saved {len(self.sessions)} sessions to history file")
         except Exception as e:
             print(f"Error saving history: {e}")
-    
+
     def create_sample_data(self):
         """Create sample session data if none exists"""
         print("Creating sample session data...")
-        
+
         # Sample websites
         websites = [
             "example.com",
@@ -108,7 +123,7 @@ class HistoryManager:
             "blog.example.net",
             "dashboard.example.io"
         ]
-        
+
         # Create sessions over the past month
         now = time.time()
         for i in range(10):
@@ -116,9 +131,9 @@ class HistoryManager:
             days_ago = i * 3  # Spread sessions across the month
             start_time = now - (days_ago * 86400)  # 86400 seconds in a day
             end_time = start_time + (3600 * (i % 3 + 1))  # 1-3 hours duration
-            
+
             website = websites[i % len(websites)]
-            
+
             # Create session
             session = CaptureSession(
                 id=f"sample_session_{i+1}",
@@ -126,39 +141,53 @@ class HistoryManager:
                 start_time=start_time,
                 end_time=end_time,
                 page_count=(i+1) * 5,  # 5-50 pages
+                forms_count=(i+1) * 2,  # 2-20 forms
+                total_fields=(i+1) * 15,  # 15-150 total fields
+                named_fields=(i+1) * 10,  # 10-100 named fields
                 description=f"Sample session for {website}" if i % 2 == 0 else ""
             )
-            
+
             self.sessions.append(session)
-        
+
         # Save the sample data
         self.save_history()
         print(f"Created {len(self.sessions)} sample sessions")
-    
+
     def start_session(self, website):
         # End any active session first
         self.end_current_session()
-        
+
         # Create new session
         self.current_session = CaptureSession(website=website)
         self.sessions.append(self.current_session)
         self.save_history()
-        
+
         print(f"Started new session: {self.current_session.id} for {website}")
         return self.current_session
 
     def end_current_session(self):
         if self.current_session and not self.current_session.end_time:
-            # Update page count
-            self.current_session.page_count = self.get_page_count(self.current_session.id)
+            # Update session statistics using enhanced stats
+            stats = self.get_session_stats(self.current_session.id)
+            self.current_session.page_count = stats.get("pages", 0)
+            self.current_session.forms_count = stats.get("forms", 0)
+            self.current_session.total_fields = stats.get("total_fields", 0)
+            self.current_session.named_fields = stats.get("named_fields", 0)
             self.current_session.end_time = time.time()
             self.save_history()
-            
-            print(f"Ended session: {self.current_session.id} with {self.current_session.page_count} pages")
+
+            print(f"Ended session: {self.current_session.id} with {self.current_session.page_count} pages, "
+                  f"{self.current_session.forms_count} forms, {self.current_session.total_fields} fields")
             self.current_session = None
             return True
         return False
-    
+
+    def get_session_stats(self, session_id):
+        """Get enhanced session statistics from Neo4j"""
+        # Import here to avoid circular imports
+        from database.graph_db import get_capture_stats
+        return get_capture_stats(session_id)
+
     def get_page_count(self, session_id):
         """Get page count from Neo4j for current session"""
         count = 0
@@ -176,21 +205,25 @@ class HistoryManager:
         except Exception as e:
             print(f"Error getting page count: {e}")
         return count
-    
+
     def update_session(self, session_id, description=None):
         """Update session details"""
         for session in self.sessions:
             if session.id == session_id:
                 if description is not None:
                     session.description = description
-                # Update page count
-                session.page_count = self.get_page_count(session_id)
+                # Update enhanced session statistics
+                stats = self.get_session_stats(session_id)
+                session.page_count = stats.get("pages", 0)
+                session.forms_count = stats.get("forms", 0)
+                session.total_fields = stats.get("total_fields", 0)
+                session.named_fields = stats.get("named_fields", 0)
                 self.save_history()
                 print(f"Updated session: {session_id}")
                 return True
         print(f"Session not found: {session_id}")
         return False
-    
+
     def delete_session(self, session_id):
         """Delete a session and its associated data"""
         # First remove from Neo4j
@@ -204,7 +237,7 @@ class HistoryManager:
                 """, session_id=session_id)
         except Exception as e:
             print(f"Error deleting session from Neo4j: {e}")
-        
+
         # Then remove from vector DB
         try:
             PG_CURSOR.execute("""
@@ -215,26 +248,26 @@ class HistoryManager:
         except Exception as e:
             print(f"Error deleting session from vector DB: {e}")
             PG_CONN.rollback()
-        
+
         # Remove from history
         self.sessions = [s for s in self.sessions if s.id != session_id]
         self.save_history()
-        
+
         print(f"Deleted session: {session_id}")
         return True
-    
+
     def get_session_by_id(self, session_id):
         """Get session by ID"""
         for session in self.sessions:
             if session.id == session_id:
                 return session
         return None
-    
+
     def get_sessions_by_website(self, website):
         """Get all sessions for a specific website"""
-        return [session for session in self.sessions 
+        return [session for session in self.sessions
                 if session.website and website.lower() in session.website.lower()]
-    
+
     def get_all_sessions(self, sort_by="start_time", reverse=True):
         """Get all sessions, sorted by the specified field"""
         if sort_by == "start_time":
@@ -244,10 +277,12 @@ class HistoryManager:
         elif sort_by == "page_count":
             return sorted(self.sessions, key=lambda s: s.page_count, reverse=reverse)
         elif sort_by == "duration":
-            return sorted(self.sessions, 
-                         key=lambda s: (s.end_time - s.start_time) if s.end_time else float('inf'), 
-                         reverse=reverse)
+            return sorted(self.sessions,
+                          key=lambda s: (
+                              s.end_time - s.start_time) if s.end_time else float('inf'),
+                          reverse=reverse)
         return self.sessions
+
 
 # Create a global instance of the history manager
 history_manager = HistoryManager()
