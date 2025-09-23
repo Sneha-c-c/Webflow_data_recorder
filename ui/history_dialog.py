@@ -269,166 +269,209 @@ class SessionHistoryDialog(QDialog):
 
     def updateSessionsTable(self):
         """Update the sessions table with filtered sessions and enhanced field information"""
-        # Set up table with more columns for enhanced field data
-        self.sessions_table.setColumnCount(12)  # Increased from 9 to 12
-        self.sessions_table.setHorizontalHeaderLabels([
-            "Website", "Start Time", "End Time", "Duration",
-            "Pages", "Forms", "Total Fields", "Named Fields",
-            "ARIA Fields", "Detection Method", "Quality Score", "Description"
-        ])
+        try:
+            # Ensure filtered_sessions exists
+            if not hasattr(self, 'filtered_sessions'):
+                self.filtered_sessions = history_manager.get_all_sessions()
 
-        # Adjust column sizes
-        self.sessions_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch)  # Website
-        self.sessions_table.horizontalHeader().setSectionResizeMode(
-            11, QHeaderView.Stretch)  # Description
-        self.sessions_table.setRowCount(len(self.filtered_sessions))
+            # Set up table with more columns for enhanced field data
+            self.sessions_table.setColumnCount(12)  # Increased from 9 to 12
+            self.sessions_table.setHorizontalHeaderLabels([
+                "Website", "Start Time", "End Time", "Duration",
+                "Pages", "Forms", "Total Fields", "Named Fields",
+                "ARIA Fields", "Detection Method", "Quality Score", "Description"
+            ])
 
-        # Populate table with enhanced data
-        for row, session in enumerate(self.filtered_sessions):
-            # Add the session ID as hidden data
-            website_item = QTableWidgetItem(session.website or "Unknown")
-            website_item.setData(Qt.UserRole, session.id)
-            self.sessions_table.setItem(row, 0, website_item)
+            # Adjust column sizes
+            self.sessions_table.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.Stretch)  # Website
+            self.sessions_table.horizontalHeader().setSectionResizeMode(
+                11, QHeaderView.Stretch)  # Description
+            self.sessions_table.setRowCount(len(self.filtered_sessions))
 
-            # Basic session data
-            self.sessions_table.setItem(
-                row, 1, QTableWidgetItem(session.formatted_start_time))
-            self.sessions_table.setItem(
-                row, 2, QTableWidgetItem(session.formatted_end_time))
-            self.sessions_table.setItem(
-                row, 3, QTableWidgetItem(session.duration))
+            # Populate table with enhanced data
+            for row, session in enumerate(self.filtered_sessions):
+                try:
+                    # Add the session ID as hidden data
+                    website_item = QTableWidgetItem(
+                        session.website or "Unknown")
+                    website_item.setData(Qt.UserRole, session.id)
+                    self.sessions_table.setItem(row, 0, website_item)
 
-            # Page and form counts (centered)
-            page_count_item = QTableWidgetItem(str(session.page_count))
-            page_count_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 4, page_count_item)
+                    # Basic session data
+                    self.sessions_table.setItem(
+                        row, 1, QTableWidgetItem(session.formatted_start_time))
+                    self.sessions_table.setItem(
+                        row, 2, QTableWidgetItem(session.formatted_end_time))
+                    self.sessions_table.setItem(
+                        row, 3, QTableWidgetItem(session.duration))
 
-            forms_count_item = QTableWidgetItem(str(session.forms_count))
-            forms_count_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 5, forms_count_item)
+                    # Page and form counts (centered) - with safe access
+                    page_count_item = QTableWidgetItem(
+                        str(getattr(session, 'page_count', 0)))
+                    page_count_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 4, page_count_item)
 
-            # Enhanced field statistics
-            total_fields_item = QTableWidgetItem(str(session.total_fields))
-            total_fields_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 6, total_fields_item)
+                    forms_count_item = QTableWidgetItem(
+                        str(getattr(session, 'forms_count', 0)))
+                    forms_count_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 5, forms_count_item)
 
-            named_fields_item = QTableWidgetItem(str(session.named_fields))
-            named_fields_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 7, named_fields_item)
+                    # Enhanced field statistics - with safe access
+                    total_fields = getattr(session, 'total_fields', 0)
+                    total_fields_item = QTableWidgetItem(str(total_fields))
+                    total_fields_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 6, total_fields_item)
 
-            # ARIA accessibility fields
-            aria_fields = getattr(session, 'aria_labeled_fields', 0)
-            aria_fields_item = QTableWidgetItem(str(aria_fields))
-            aria_fields_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 8, aria_fields_item)
+                    named_fields = getattr(session, 'named_fields', 0)
+                    named_fields_item = QTableWidgetItem(str(named_fields))
+                    named_fields_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 7, named_fields_item)
 
-            # Detection method indicator
-            selenium_fields = getattr(session, 'selenium_fields', 0)
-            shadow_fields = getattr(session, 'shadow_dom_fields', 0)
+                    # ARIA accessibility fields
+                    aria_fields = getattr(session, 'aria_labeled_fields', 0)
+                    aria_fields_item = QTableWidgetItem(str(aria_fields))
+                    aria_fields_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 8, aria_fields_item)
 
-            if selenium_fields > 0 or shadow_fields > 0:
-                detection_method = "🤖 Enhanced"
-                detection_tooltip = f"Selenium: {selenium_fields}, Shadow DOM: {shadow_fields}"
+                    # Detection method indicator
+                    selenium_fields = getattr(session, 'selenium_fields', 0)
+                    shadow_fields = getattr(session, 'shadow_dom_fields', 0)
+
+                    if selenium_fields > 0 or shadow_fields > 0:
+                        detection_method = "Enhanced"
+                        detection_tooltip = f"Selenium: {selenium_fields}, Shadow DOM: {shadow_fields}"
+                    else:
+                        detection_method = "Basic HTML"
+                        detection_tooltip = "HTML parsing only"
+
+                    detection_item = QTableWidgetItem(detection_method)
+                    detection_item.setToolTip(detection_tooltip)
+                    detection_item.setTextAlignment(Qt.AlignCenter)
+                    self.sessions_table.setItem(row, 9, detection_item)
+
+                    # Quality score calculation
+                    if total_fields > 0:
+                        id_fields = getattr(session, 'id_fields', 0)
+                        identifiable_fields = named_fields + id_fields
+                        success_rate = round(
+                            (identifiable_fields / total_fields) * 100, 1)
+
+                        # Add accessibility bonus
+                        if aria_fields > 0:
+                            accessibility_bonus = min(
+                                10, (aria_fields / total_fields) * 100 * 0.1)
+                            success_rate += accessibility_bonus
+
+                        # Quality rating
+                        if success_rate >= 80:
+                            quality_rating = f"Excellent {success_rate:.1f}%"
+                        elif success_rate >= 60:
+                            quality_rating = f"Good {success_rate:.1f}%"
+                        elif success_rate >= 40:
+                            quality_rating = f"Fair {success_rate:.1f}%"
+                        else:
+                            quality_rating = f"Poor {success_rate:.1f}%"
+                    else:
+                        quality_rating = "N/A"
+                        success_rate = 0
+
+                    quality_item = QTableWidgetItem(quality_rating)
+                    quality_item.setTextAlignment(Qt.AlignCenter)
+                    quality_item.setToolTip(
+                        f"Field identification rate: {success_rate:.1f}%")
+                    self.sessions_table.setItem(row, 10, quality_item)
+
+                    # Description
+                    description = getattr(session, 'description', '')
+                    description_item = QTableWidgetItem(description)
+                    self.sessions_table.setItem(row, 11, description_item)
+
+                except Exception as row_error:
+                    print(f"Error processing session row {row}: {row_error}")
+                    # Add basic error info for this row
+                    error_item = QTableWidgetItem(
+                        f"Error: {session.id if hasattr(session, 'id') else 'Unknown'}")
+                    self.sessions_table.setItem(row, 0, error_item)
+
+            # Update status label with enhanced information
+            if not self.filtered_sessions:
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText("No sessions found")
             else:
-                detection_method = "📄 Basic HTML"
-                detection_tooltip = "HTML parsing only"
+                # Calculate summary statistics with safe access
+                total_pages = sum(getattr(s, 'page_count', 0)
+                                  for s in self.filtered_sessions)
+                total_forms = sum(getattr(s, 'forms_count', 0)
+                                  for s in self.filtered_sessions)
+                total_fields = sum(getattr(s, 'total_fields', 0)
+                                   for s in self.filtered_sessions)
 
-            detection_item = QTableWidgetItem(detection_method)
-            detection_item.setToolTip(detection_tooltip)
-            detection_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 9, detection_item)
+                filter_text = ""
+                if hasattr(self, 'search_input') and self.search_input.text().strip():
+                    filter_text += f" | Search: '{self.search_input.text().strip()}'"
 
-            # Quality score calculation
-            total_fields = session.total_fields
-            named_fields = session.named_fields
-            id_fields = getattr(session, 'id_fields', 0)
+                if hasattr(self, 'use_date_filter') and self.use_date_filter.isChecked():
+                    if hasattr(self, 'date_from') and hasattr(self, 'date_to'):
+                        from_date = self.date_from.date().toString("yyyy-MM-dd")
+                        to_date = self.date_to.date().toString("yyyy-MM-dd")
+                        filter_text += f" | Date: {from_date} to {to_date}"
 
-            if total_fields > 0:
-                identifiable_fields = named_fields + id_fields
-                success_rate = round(
-                    (identifiable_fields / total_fields) * 100, 1)
+                # Enhanced status with totals
+                status_text = (f"Showing {len(self.filtered_sessions)} sessions"
+                               f" | {total_pages} pages"
+                               f" | {total_forms} forms"
+                               f" | {total_fields} fields"
+                               f"{filter_text}")
 
-                # Add accessibility bonus
-                if aria_fields > 0:
-                    accessibility_bonus = min(
-                        10, (aria_fields / total_fields) * 100 * 0.1)
-                    success_rate += accessibility_bonus
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText(status_text)
 
-                # Quality rating
-                if success_rate >= 80:
-                    quality_rating = f"🌟 {success_rate:.1f}%"
-                    quality_color = "green"
-                elif success_rate >= 60:
-                    quality_rating = f"✨ {success_rate:.1f}%"
-                    quality_color = "blue"
-                elif success_rate >= 40:
-                    quality_rating = f"⚠️ {success_rate:.1f}%"
-                    quality_color = "orange"
-                else:
-                    quality_rating = f"❌ {success_rate:.1f}%"
-                    quality_color = "red"
-            else:
-                quality_rating = "➖ N/A"
-                quality_color = "gray"
+            # Enable/disable buttons based on selection - with safe access
+            has_selection = len(self.filtered_sessions) > 0
+            if hasattr(self, 'view_button'):
+                self.view_button.setEnabled(has_selection)
+            if hasattr(self, 'delete_button'):
+                self.delete_button.setEnabled(has_selection)
+            if hasattr(self, 'add_desc_button'):
+                self.add_desc_button.setEnabled(has_selection)
+            if hasattr(self, 'export_button'):
+                self.export_button.setEnabled(len(self.filtered_sessions) > 0)
 
-            quality_item = QTableWidgetItem(quality_rating)
-            quality_item.setTextAlignment(Qt.AlignCenter)
-            quality_item.setToolTip(
-                f"Field identification rate: {success_rate:.1f}%")
-            self.sessions_table.setItem(row, 10, quality_item)
+            # Auto-resize columns to fit content
+            try:
+                self.sessions_table.resizeColumnsToContents()
 
-            # Description
-            description_item = QTableWidgetItem(session.description)
-            self.sessions_table.setItem(row, 11, description_item)
+                # Ensure minimum column widths for readability
+                header = self.sessions_table.horizontalHeader()
+                for col in range(self.sessions_table.columnCount()):
+                    # Don't resize website and description columns (they stretch)
+                    if col not in [0, 11]:
+                        current_width = header.sectionSize(col)
+                        # Smaller width for count columns
+                        min_width = 80 if col in [4, 5, 6, 7, 8] else 120
+                        if current_width < min_width:
+                            header.resizeSection(col, min_width)
+            except Exception as resize_error:
+                print(f"Error resizing columns: {resize_error}")
 
-        # Update status label with enhanced information
-        if not self.filtered_sessions:
-            self.status_label.setText("No sessions found")
-        else:
-            # Calculate summary statistics
-            total_pages = sum(s.page_count for s in self.filtered_sessions)
-            total_forms = sum(s.forms_count for s in self.filtered_sessions)
-            total_fields = sum(s.total_fields for s in self.filtered_sessions)
+        except Exception as e:
+            print(f"Critical error in updateSessionsTable: {e}")
+            import traceback
+            traceback.print_exc()
 
-            filter_text = ""
-            if self.search_input.text().strip():
-                filter_text += f" | 🔍 Search: '{self.search_input.text().strip()}'"
-
-            if self.use_date_filter.isChecked():
-                from_date = self.date_from.date().toString("yyyy-MM-dd")
-                to_date = self.date_to.date().toString("yyyy-MM-dd")
-                filter_text += f" | 📅 Date: {from_date} to {to_date}"
-
-            # Enhanced status with totals
-            status_text = (f"📊 Showing {len(self.filtered_sessions)} sessions"
-                           f" | 📄 {total_pages} pages"
-                           f" | 📝 {total_forms} forms"
-                           f" | 🔢 {total_fields} fields"
-                           f"{filter_text}")
-
-            self.status_label.setText(status_text)
-
-        # Enable/disable buttons based on selection
-        has_selection = len(self.filtered_sessions) > 0
-        self.view_button.setEnabled(has_selection)
-        self.delete_button.setEnabled(has_selection)
-        self.add_desc_button.setEnabled(has_selection)
-        self.export_button.setEnabled(len(self.filtered_sessions) > 0)
-
-        # Auto-resize columns to fit content
-        self.sessions_table.resizeColumnsToContents()
-
-        # Ensure minimum column widths for readability
-        header = self.sessions_table.horizontalHeader()
-        for col in range(self.sessions_table.columnCount()):
-            # Don't resize website and description columns (they stretch)
-            if col not in [0, 11]:
-                current_width = header.sectionSize(col)
-                # Smaller width for count columns
-                min_width = 80 if col in [4, 5, 6, 7, 8] else 120
-                if current_width < min_width:
-                    header.resizeSection(col, min_width)
+            # Emergency fallback
+            try:
+                self.sessions_table.setRowCount(1)
+                self.sessions_table.setColumnCount(2)
+                self.sessions_table.setHorizontalHeaderLabels(
+                    ["Error", "Details"])
+                error_item = QTableWidgetItem("Sessions Table Error")
+                details_item = QTableWidgetItem(str(e))
+                self.sessions_table.setItem(0, 0, error_item)
+                self.sessions_table.setItem(0, 1, details_item)
+            except:
+                pass  # If even the fallback fails, just continue
 
     def showContextMenu(self, position):
         """Show context menu for session row"""
