@@ -10,8 +10,8 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Vector Database (PostgreSQL with pgvector) Connection
 DB_CONFIG = {
-    "dbname": "vector_db",
-    "user": "harid",
+    "dbname": "vector_database",
+    "user": "test_case_validator",
     "password": "",
     "host": "localhost"
 }

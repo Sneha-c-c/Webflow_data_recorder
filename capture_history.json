@@ -119,5 +119,38 @@
     "total_fields": 0,
     "named_fields": 0,
     "description": ""
+  },
+  {
+    "id": "session_1758698885",
+    "website": "https://stackoverflow.com",
+    "start_time": 1758698885.5012941,
+    "end_time": 1758698985.8019385,
+    "page_count": 0,
+    "forms_count": 0,
+    "total_fields": 0,
+    "named_fields": 0,
+    "description": ""
+  },
+  {
+    "id": "session_1758710381",
+    "website": "https://in21.leadsquared.com",
+    "start_time": 1758710381.0965116,
+    "end_time": 1758710520.4716983,
+    "page_count": 7,
+    "forms_count": 1,
+    "total_fields": 0,
+    "named_fields": 0,
+    "description": ""
+  },
+  {
+    "id": "session_1758715118",
+    "website": "https://in21.leadsquared.com",
+    "start_time": 1758715118.0539925,
+    "end_time": 1758715735.924971,
+    "page_count": 24,
+    "forms_count": 8,
+    "total_fields": 0,
+    "named_fields": 0,
+    "description": ""
   }
 ]
