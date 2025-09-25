@@ -1,0 +1,44 @@
+2025/09/24-17:27:30.685 109e2 Reusing MANIFEST /home/lenovo/web_flow_capture/WebPortal_FlowCapture/chrome_data/Default/Local Storage/leveldb/MANIFEST-000001
+2025/09/24-17:27:30.694 109e2 Recovering log #6
+2025/09/24-17:27:30.694 109e2 Reusing old log /home/lenovo/web_flow_capture/WebPortal_FlowCapture/chrome_data/Default/Local Storage/leveldb/000006.log 
+2025/09/24-17:30:46.216 109e3 Level-0 table #10: started
+2025/09/24-17:30:46.229 109e3 Level-0 table #10: 37733 bytes OK
+2025/09/24-17:30:46.234 109e3 Delete type=0 #6
+2025/09/24-17:31:46.216 109e2 Level-0 table #12: started
+2025/09/24-17:31:46.228 109e2 Level-0 table #12: 28611 bytes OK
+2025/09/24-17:31:46.233 109e2 Delete type=0 #9
+2025/09/24-17:33:46.218 109e3 Level-0 table #14: started
+2025/09/24-17:33:46.233 109e3 Level-0 table #14: 28569 bytes OK
+2025/09/24-17:33:46.241 109e3 Delete type=0 #11
+2025/09/24-17:33:46.243 109e3 Compacting 4@0 + 0@1 files
+2025/09/24-17:33:46.253 109e3 Generated table #15@0: 75 keys, 40178 bytes
+2025/09/24-17:33:46.253 109e3 Compacted 4@0 + 0@1 files => 40178 bytes
+2025/09/24-17:33:46.259 109e3 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/09/24-17:33:46.262 109e3 Delete type=2 #14
+2025/09/24-17:33:46.262 109e3 Delete type=2 #10
+2025/09/24-17:33:46.262 109e3 Delete type=2 #7
+2025/09/24-17:33:46.263 109e3 Delete type=2 #12
+2025/09/24-17:34:19.212 109e3 Level-0 table #17: started
+2025/09/24-17:34:19.226 109e3 Level-0 table #17: 28257 bytes OK
+2025/09/24-17:34:19.234 109e3 Delete type=0 #13
+2025/09/24-17:35:46.216 109e3 Level-0 table #19: started
+2025/09/24-17:35:46.221 109e3 Level-0 table #19: 26652 bytes OK
+2025/09/24-17:35:46.226 109e3 Delete type=0 #16
+2025/09/24-17:35:53.046 109e3 Level-0 table #21: started
+2025/09/24-17:35:53.059 109e3 Level-0 table #21: 28266 bytes OK
+2025/09/24-17:35:53.068 109e3 Delete type=0 #18
+2025/09/24-17:38:00.171 109e3 Level-0 table #23: started
+2025/09/24-17:38:00.177 109e3 Level-0 table #23: 27953 bytes OK
+2025/09/24-17:38:00.182 109e3 Delete type=0 #20
+2025/09/24-17:38:00.183 109e3 Compacting 4@0 + 1@1 files
+2025/09/24-17:38:00.189 109e3 Generated table #24@0: 97 keys, 40816 bytes
+2025/09/24-17:38:00.189 109e3 Compacted 4@0 + 1@1 files => 40816 bytes
+2025/09/24-17:38:00.194 109e3 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/09/24-17:38:00.195 109e3 Delete type=2 #17
+2025/09/24-17:38:00.195 109e3 Delete type=2 #19
+2025/09/24-17:38:00.196 109e3 Delete type=2 #21
+2025/09/24-17:38:00.196 109e3 Delete type=2 #23
+2025/09/24-17:38:00.196 109e3 Delete type=2 #15
+2025/09/24-17:38:22.348 109e3 Level-0 table #26: started
+2025/09/24-17:38:22.364 109e3 Level-0 table #26: 28950 bytes OK
+2025/09/24-17:38:22.373 109e3 Delete type=0 #22
