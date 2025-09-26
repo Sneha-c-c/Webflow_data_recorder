@@ -177,12 +177,12 @@ def update_page_actions(url, actions, session_id=None):
         PG_CURSOR.execute(
             """
             UPDATE page_embeddings
-            SET page_actions = %s,
+            SET page_actions = %s::jsonb,
                 timestamp = %s,
                 session_id = COALESCE(%s, session_id)
             WHERE url = %s
             """,
-            (Json(actions), time.time(), session_id, url)
+            (json.dumps(actions), time.time(), session_id, url)
         )
 
         if PG_CURSOR.rowcount == 0:
@@ -190,10 +190,10 @@ def update_page_actions(url, actions, session_id=None):
             PG_CURSOR.execute(
                 """
                 INSERT INTO page_embeddings (url, embedding, content, content_type, timestamp, title, is_alert, session_id, page_actions)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                 ON CONFLICT (url) DO NOTHING
                 """,
-                (url, None, None, 'html', time.time(), '', False, session_id, Json(actions))
+                (url, None, None, 'html', time.time(), '', False, session_id, json.dumps(actions))
             )
 
         PG_CONN.commit()

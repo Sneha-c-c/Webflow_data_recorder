@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from urllib.parse import urlsplit, urlunsplit
 
 from database.graph_db import store_in_neo4j
 from database.vector_db import store_in_pgvector, update_page_actions  # Added update_page_actions import
@@ -420,22 +421,58 @@ def drain_action_queue():
 
 def process_new_actions(tab_url, actions):
     """
-    Accumulate actions for the given URL and persist to Postgres (page_actions column).
+    Accumulate actions and persist them to Postgres (page_actions column).
+    Actions are grouped and stored by the action.url captured at event time to avoid
+    misattribution when navigation occurs between capture and persistence.
     Sensitive values are already masked in JS. We persist the raw list as JSONB.
     """
     if not actions:
         return
 
-    # Initialize buffer for URL
-    url_actions = page_action_logs.setdefault(tab_url, {"actions": []})
-    url_actions["actions"].extend(actions)
+    # Helper to normalize and filter URLs to consistent keys
+    def _normalize_url(u: str):
+        try:
+            if not u:
+                return None
+            parts = urlsplit(u)
+            # Ignore non-http(s) schemes and about/chrome/etc.
+            if parts.scheme not in ("http", "https"):
+                return None
+            # Drop fragments to avoid duplicate rows for the same page with different hashes
+            parts = parts._replace(fragment="")
+            return urlunsplit(parts)
+        except Exception:
+            return u or None
 
-    # Persist to DB (updates the page_actions JSONB for this URL)
+    # Group actions by their own captured URL (fallback to tab_url if missing)
+    grouped = {}
+    for a in actions:
+        a_url = _normalize_url(a.get("url") or tab_url)
+        if not a_url:
+            continue
+        grouped.setdefault(a_url, []).append(a)
+
+    if not grouped:
+        return
+
+    # Get session id for association (if active)
+    session_id = None
     try:
-        update_page_actions(tab_url, url_actions["actions"])
-        signals.update_status.emit(f"Recorded {len(actions)} action(s) on {tab_url}")
-    except Exception as e:
-        print(f"Failed to persist actions for {tab_url}: {e}")
+        from database.history_manager import history_manager
+        if history_manager.current_session:
+            session_id = history_manager.current_session.id
+    except Exception:
+        session_id = None
+
+    # Append to in-memory log and persist per URL group
+    for a_url, items in grouped.items():
+        url_actions = page_action_logs.setdefault(a_url, {"actions": []})
+        url_actions["actions"].extend(items)
+        try:
+            update_page_actions(a_url, url_actions["actions"], session_id=session_id)
+            signals.update_status.emit(f"Recorded {len(items)} action(s) on {a_url}")
+        except Exception as e:
+            print(f"Failed to persist actions for {a_url}: {e}")
 
 
 # -------------------------- Scrape Metadata (existing) --------------------------
