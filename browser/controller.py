@@ -403,7 +403,7 @@ def drain_action_queue():
     if not is_browser_alive():
         return []
     try:
-        return browser.execute_script("""
+        actions = browser.execute_script("""
             (function() {
                 try {
                     var q = (window.__flowActionQueue || []);
@@ -414,6 +414,10 @@ def drain_action_queue():
                 }
             })();
         """) or []
+        # Debug: show a quick summary of drained actions
+        if actions and isinstance(actions, list):
+            print(f"[DEBUG] drain_action_queue: drained {len(actions)} action(s)")
+        return actions
     except Exception as e:
         print(f"Error draining action queue: {e}")
         return []
@@ -429,6 +433,16 @@ def process_new_actions(tab_url, actions):
     if not actions:
         return
 
+    # Debug: Confirm receipt of actions prior to persistence
+    try:
+        print(f"[DEBUG] process_new_actions: received {len(actions)} action(s) for tab_url={tab_url}")
+        if actions:
+            # Print a compact summary of first action
+            a0 = actions[0]
+            print(f"[DEBUG] process_new_actions: sample action -> type={a0.get('type')} url={a0.get('url')} ts={a0.get('timestamp_utc')}")
+    except Exception:
+        pass
+
     # Helper to normalize and filter URLs to consistent keys
     def _normalize_url(u: str):
         try:
@@ -438,8 +452,8 @@ def process_new_actions(tab_url, actions):
             # Ignore non-http(s) schemes and about/chrome/etc.
             if parts.scheme not in ("http", "https"):
                 return None
-            # Drop fragments to avoid duplicate rows for the same page with different hashes
-            parts = parts._replace(fragment="")
+            # IMPORTANT: Preserve fragment to match how URLs are stored elsewhere (Neo4j/Vector DB)
+            # Previously we stripped fragments which caused mismatch and page_actions appearing empty.
             return urlunsplit(parts)
         except Exception:
             return u or None
@@ -453,7 +467,14 @@ def process_new_actions(tab_url, actions):
         grouped.setdefault(a_url, []).append(a)
 
     if not grouped:
+        print("[DEBUG] process_new_actions: no valid grouped URLs (possibly non-http(s) schemes)")
         return
+
+    # Debug: Show grouping outcome
+    try:
+        print(f"[DEBUG] process_new_actions: grouped into {len(grouped)} URL(s): {list(grouped.keys())[:3]}{'...' if len(grouped)>3 else ''}")
+    except Exception:
+        pass
 
     # Get session id for association (if active)
     session_id = None
@@ -469,6 +490,7 @@ def process_new_actions(tab_url, actions):
         url_actions = page_action_logs.setdefault(a_url, {"actions": []})
         url_actions["actions"].extend(items)
         try:
+            print(f"[DEBUG] Persisting {len(items)} new action(s) (total={len(url_actions['actions'])}) for {a_url} session={session_id or 'session_unknown'}")
             update_page_actions(a_url, url_actions["actions"], session_id=session_id)
             signals.update_status.emit(f"Recorded {len(items)} action(s) on {a_url}")
         except Exception as e:
@@ -703,6 +725,12 @@ def capture_all_tabs():
 
                 # Drain any pending actions from this tab
                 pending_actions = drain_action_queue() or []
+                if pending_actions:
+                    try:
+                        # Debug: show how many actions came from this tab capture cycle
+                        print(f"[DEBUG] capture_all_tabs: {len(pending_actions)} action(s) drained for handle={handle}")
+                    except Exception:
+                        pass
 
                 # Get the URL and content
                 url = browser.current_url
@@ -721,6 +749,8 @@ def capture_all_tabs():
                     "is_new": handle in new_handles,
                     "events": pending_actions
                 })
+                if pending_actions:
+                    print(f"[DEBUG] capture_all_tabs: appended {len(pending_actions)} action(s) to results for url={url}")
             except Exception as e:
                 print(f"Error capturing tab {handle}: {e}")
     except Exception as e:

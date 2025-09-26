@@ -193,6 +193,7 @@ def update_page_actions(url, actions, session_id=None):
 
     try:
         session_key = session_id or "session_unknown"
+        print(f"[DEBUG] update_page_actions: url={url} session_key={session_key} incoming_actions={len(actions)}")
 
         # Fetch existing page_actions (if any)
         PG_CURSOR.execute(
@@ -200,10 +201,21 @@ def update_page_actions(url, actions, session_id=None):
             (url,)
         )
         row = PG_CURSOR.fetchone()
+        row_exists = bool(row)
+        existing_count = 0
 
         new_actions_obj = {}
-        if row:
+        if row_exists:
             existing = row[0]
+            # Determine existing count for debug
+            if isinstance(existing, dict):
+                existing_count = len(existing.get(session_key, []))
+            elif isinstance(existing, list):
+                existing_count = len(existing)
+            else:
+                existing_count = 0
+            print(f"[DEBUG] update_page_actions: row exists, existing actions for session={session_key}: {existing_count}")
+
             # Normalize existing to a dict keyed by session
             if existing is None:
                 new_actions_obj = {session_key: actions}
@@ -245,8 +257,17 @@ def update_page_actions(url, actions, session_id=None):
                 """,
                 (url, None, None, 'html', time.time(), '', False, session_id, Json(new_actions_obj))
             )
+            print(f"[DEBUG] update_page_actions: row did not exist, inserted new row with initial actions for session={session_key}")
 
         PG_CONN.commit()
+
+        # Debug: confirm resulting counts
+        try:
+            after_count = len(new_actions_obj.get(session_key, [])) if isinstance(new_actions_obj, dict) else 0
+            print(f"[DEBUG] update_page_actions: persisted actions for session={session_key} now={after_count}")
+        except Exception:
+            pass
+
         return True
     except Exception as e:
         print(f"Error updating page_actions for {url}: {e}")
