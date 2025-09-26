@@ -4,6 +4,8 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from bs4 import BeautifulSoup
 from datetime import datetime
+import json
+from psycopg2.extras import Json
 
 # Initialize embedding model
 model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -23,7 +25,7 @@ PG_CURSOR = None
 def connect_to_db():
     """Create a connection to the PostgreSQL database"""
     global PG_CONN, PG_CURSOR
-    
+
     try:
         PG_CONN = psycopg2.connect(**DB_CONFIG)
         PG_CURSOR = PG_CONN.cursor()
@@ -33,22 +35,22 @@ def connect_to_db():
         return False
 
 def init_database():
-    """Initialize the database with required tables and extensions"""
+    """Initialize the database with required tables and extensions, including page_actions JSONB column."""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return False
-    
+
     try:
         # Check if pgvector extension exists
         PG_CURSOR.execute("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')")
         has_vector = PG_CURSOR.fetchone()[0]
-        
+
         if not has_vector:
             # Create pgvector extension
             PG_CURSOR.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        
+
         # Create improved table with additional columns
         PG_CURSOR.execute("""
         CREATE TABLE IF NOT EXISTS page_embeddings (
@@ -62,20 +64,26 @@ def init_database():
             session_id TEXT
         );
         """)
-        
+
+        # Ensure page_actions JSONB column exists for storing structured actions (NEW)
+        PG_CURSOR.execute("""
+        ALTER TABLE page_embeddings
+        ADD COLUMN IF NOT EXISTS page_actions JSONB
+        """)
+
         # Create index for faster similarity search
         PG_CURSOR.execute("""
         CREATE INDEX IF NOT EXISTS page_embeddings_embedding_idx 
         ON page_embeddings USING ivfflat (embedding vector_cosine_ops)
         WITH (lists = 100);
         """)
-        
+
         # Create index for session_id for faster filtering
         PG_CURSOR.execute("""
         CREATE INDEX IF NOT EXISTS page_embeddings_session_idx 
         ON page_embeddings (session_id);
         """)
-        
+
         PG_CONN.commit()
         return True
     except Exception as e:
@@ -87,11 +95,11 @@ def init_database():
 def store_in_pgvector(url, content, metadata=None, session_id=None):
     """Store page content and embeddings in the vector database"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return False
-    
+
     try:
         # Extract text content
         if content and isinstance(content, str):
@@ -107,20 +115,20 @@ def store_in_pgvector(url, content, metadata=None, session_id=None):
         else:
             text_content = "No content available"
             content_type = "unknown"
-        
+
         # Create embedding
         embedding = model.encode(text_content).astype('float32')
-        
+
         # Get title from metadata
         title = metadata.get("title", "") if metadata else ""
         is_alert = metadata.get("is_alert", False) if metadata else False
-        
+
         # Get current session ID if not provided
         if not session_id:
             from database.history_manager import history_manager
             if history_manager.current_session:
                 session_id = history_manager.current_session.id
-        
+
         # Store URL, embedding and text content for retrieval
         PG_CURSOR.execute("""
             INSERT INTO page_embeddings 
@@ -138,7 +146,7 @@ def store_in_pgvector(url, content, metadata=None, session_id=None):
             url, embedding.tolist(), text_content, content_type, time.time(), title, is_alert, session_id,
             embedding.tolist(), text_content, content_type, time.time(), title, is_alert, session_id
         ))
-        
+
         PG_CONN.commit()
         return True
     except Exception as e:
@@ -146,29 +154,78 @@ def store_in_pgvector(url, content, metadata=None, session_id=None):
         PG_CONN.rollback()
         return False
 
+# PUBLIC_INTERFACE
+def update_page_actions(url, actions, session_id=None):
+    """Update the page_actions JSONB column for the given URL.
+
+    Args:
+        url: Page URL (primary key in page_embeddings).
+        actions: List[dict] structured actions as captured by the browser listeners.
+        session_id: Optional session id to associate with the row (if provided, only set if currently null).
+
+    Behavior:
+        - If the row exists, updates page_actions and timestamp (and session_id if provided).
+        - If the row does not exist, inserts a minimal row with page_actions and timestamp.
+    """
+    global PG_CONN, PG_CURSOR
+    if not PG_CONN or not PG_CURSOR:
+        if not connect_to_db():
+            return False
+
+    try:
+        # First try to update existing row
+        PG_CURSOR.execute(
+            """
+            UPDATE page_embeddings
+            SET page_actions = %s,
+                timestamp = %s,
+                session_id = COALESCE(%s, session_id)
+            WHERE url = %s
+            """,
+            (Json(actions), time.time(), session_id, url)
+        )
+
+        if PG_CURSOR.rowcount == 0:
+            # Insert a minimal row if not exists (embedding/content can be NULL)
+            PG_CURSOR.execute(
+                """
+                INSERT INTO page_embeddings (url, embedding, content, content_type, timestamp, title, is_alert, session_id, page_actions)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (url) DO NOTHING
+                """,
+                (url, None, None, 'html', time.time(), '', False, session_id, Json(actions))
+            )
+
+        PG_CONN.commit()
+        return True
+    except Exception as e:
+        print(f"Error updating page_actions for {url}: {e}")
+        PG_CONN.rollback()
+        return False
+
 # Query page content from Vector DB
 def get_page_content(url):
     """Get the stored text content for a page from Vector DB"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return None
-    
+
     try:
         PG_CURSOR.execute("""
-        SELECT content, timestamp, content_type, title, is_alert, session_id 
+        SELECT content, timestamp, content_type, title, is_alert, session_id, page_actions 
         FROM page_embeddings
         WHERE url = %s
         """, (url,))
-        
+
         result = PG_CURSOR.fetchone()
         if result:
-            content, timestamp, content_type, title, is_alert, session_id = result
-            
+            content, timestamp, content_type, title, is_alert, session_id, page_actions = result
+
             # Format datetime
             readable_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S") if timestamp else "Unknown"
-            
+
             return {
                 "content": content,
                 "timestamp": timestamp,
@@ -176,7 +233,8 @@ def get_page_content(url):
                 "content_type": content_type,
                 "title": title,
                 "is_alert": is_alert,
-                "session_id": session_id
+                "session_id": session_id,
+                "page_actions": page_actions
             }
         return None
     except Exception as e:
@@ -187,24 +245,24 @@ def get_page_content(url):
 def find_similar_pages(url, limit=5, session_id=None):
     """Find pages with similar content based on vector embeddings"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return []
-    
+
     try:
         # First get the embedding for the target URL
         PG_CURSOR.execute("""
         SELECT embedding FROM page_embeddings
         WHERE url = %s
         """, (url,))
-        
+
         result = PG_CURSOR.fetchone()
         if not result:
             return []
-            
+
         target_embedding = result[0]
-        
+
         # Find similar pages using cosine similarity
         if session_id:
             # Filter by session
@@ -224,7 +282,7 @@ def find_similar_pages(url, limit=5, session_id=None):
             ORDER BY similarity DESC
             LIMIT %s
             """, (target_embedding, url, limit))
-        
+
         similar_pages = []
         for similar_url, title, similarity in PG_CURSOR.fetchall():
             similar_pages.append({
@@ -232,7 +290,7 @@ def find_similar_pages(url, limit=5, session_id=None):
                 "title": title or similar_url,
                 "similarity": round(similarity * 100, 2)  # Convert to percentage
             })
-            
+
         return similar_pages
     except Exception as e:
         print(f"Error finding similar pages: {e}")
@@ -242,15 +300,15 @@ def find_similar_pages(url, limit=5, session_id=None):
 def search_pages(query, limit=10, session_id=None):
     """Search pages by keyword in content"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return []
-    
+
     try:
         # Create embedding for the query
         query_embedding = model.encode(query).astype('float32')
-        
+
         # Search using vector similarity
         if session_id:
             # Filter by session
@@ -269,7 +327,7 @@ def search_pages(query, limit=10, session_id=None):
             ORDER BY similarity DESC
             LIMIT %s
             """, (query_embedding.tolist(), limit))
-        
+
         results = []
         for url, title, similarity in PG_CURSOR.fetchall():
             # Only include results with reasonable similarity
@@ -279,7 +337,7 @@ def search_pages(query, limit=10, session_id=None):
                     "title": title or url,
                     "similarity": round(similarity * 100, 2)
                 })
-        
+
         return results
     except Exception as e:
         print(f"Error searching pages: {e}")
@@ -289,11 +347,11 @@ def search_pages(query, limit=10, session_id=None):
 def get_all_pages(limit=100, offset=0, session_id=None):
     """Get all pages in the database, with pagination"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return []
-    
+
     try:
         if session_id:
             # Filter by session
@@ -312,12 +370,12 @@ def get_all_pages(limit=100, offset=0, session_id=None):
             ORDER BY timestamp DESC
             LIMIT %s OFFSET %s
             """, (limit, offset))
-        
+
         pages = []
         for url, title, content_type, timestamp, is_alert, session_id in PG_CURSOR.fetchall():
             # Format datetime
             readable_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S") if timestamp else "Unknown"
-            
+
             pages.append({
                 "url": url,
                 "title": title or url,
@@ -327,7 +385,7 @@ def get_all_pages(limit=100, offset=0, session_id=None):
                 "is_alert": is_alert,
                 "session_id": session_id
             })
-        
+
         return pages
     except Exception as e:
         print(f"Error getting all pages: {e}")
@@ -337,20 +395,20 @@ def get_all_pages(limit=100, offset=0, session_id=None):
 def get_db_stats(session_id=None):
     """Get statistics about the vector database"""
     global PG_CONN, PG_CURSOR
-    
+
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return {}
-    
+
     try:
         # Get total count
         if session_id:
             PG_CURSOR.execute("SELECT COUNT(*) FROM page_embeddings WHERE session_id = %s", (session_id,))
         else:
             PG_CURSOR.execute("SELECT COUNT(*) FROM page_embeddings")
-            
+
         total_count = PG_CURSOR.fetchone()[0]
-        
+
         # Get counts by content type
         if session_id:
             PG_CURSOR.execute("""
@@ -365,9 +423,9 @@ def get_db_stats(session_id=None):
             FROM page_embeddings 
             GROUP BY content_type
             """)
-            
+
         content_types = {row[0]: row[1] for row in PG_CURSOR.fetchall()}
-        
+
         # Get alert count
         if session_id:
             PG_CURSOR.execute("""
@@ -376,9 +434,9 @@ def get_db_stats(session_id=None):
             """, (session_id,))
         else:
             PG_CURSOR.execute("SELECT COUNT(*) FROM page_embeddings WHERE is_alert = true")
-            
+
         alert_count = PG_CURSOR.fetchone()[0]
-        
+
         # Get earliest and latest timestamps
         if session_id:
             PG_CURSOR.execute("""
@@ -388,9 +446,9 @@ def get_db_stats(session_id=None):
             """, (session_id,))
         else:
             PG_CURSOR.execute("SELECT MIN(timestamp), MAX(timestamp) FROM page_embeddings")
-            
+
         min_ts, max_ts = PG_CURSOR.fetchone()
-        
+
         return {
             "total": total_count,
             "content_types": content_types,
