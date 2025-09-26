@@ -804,6 +804,13 @@ CREATE TABLE IF NOT EXISTS page_embeddings (
     forms_count INTEGER DEFAULT 0
 );
 """)
+# Ensure page_actions JSONB column exists for structured user action logs captured during sessions.
+# This column stores arrays of action dictionaries (click/input/change/submit/keydown) and is used by browser.controller.update_page_actions.
+# Safe to run repeatedly: IF NOT EXISTS prevents errors if the column already exists.
+PG_CURSOR.execute("""
+ALTER TABLE page_embeddings
+ADD COLUMN IF NOT EXISTS page_actions JSONB
+""")
 PG_CONN.commit()
 
 flows = {}
