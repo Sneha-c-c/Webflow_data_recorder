@@ -84,6 +84,16 @@ def init_database():
         ON page_embeddings (session_id);
         """)
 
+        # Additional helpful indexes for per-session action queries
+        PG_CURSOR.execute("""
+        CREATE INDEX IF NOT EXISTS page_embeddings_url_session_idx 
+        ON page_embeddings (url, session_id);
+        """)
+        PG_CURSOR.execute("""
+        CREATE INDEX IF NOT EXISTS page_embeddings_page_actions_gin 
+        ON page_embeddings USING GIN (page_actions);
+        """)
+
         PG_CONN.commit()
         return True
     except Exception as e:
@@ -156,44 +166,84 @@ def store_in_pgvector(url, content, metadata=None, session_id=None):
 
 # PUBLIC_INTERFACE
 def update_page_actions(url, actions, session_id=None):
-    """Update the page_actions JSONB column for the given URL.
+    """Update page_actions for a URL, keeping actions separated per flow/session.
+
+    Design:
+    - page_actions JSONB is stored as an object mapping: { "<session_id>": [action, ...], ... }
+      This allows the same URL to have distinct action logs per recorded flow.
 
     Args:
         url: Page URL (primary key in page_embeddings).
-        actions: List[dict] structured actions as captured by the browser listeners.
-        session_id: Optional session id to associate with the row (if provided, only set if currently null).
+        actions: List[dict] structured actions captured by the browser listeners.
+        session_id: Optional session id; when omitted, uses "session_unknown" as the key.
 
     Behavior:
-        - If the row exists, updates page_actions and timestamp (and session_id if provided).
-        - If the row does not exist, inserts a minimal row with page_actions and timestamp.
+        - If the row exists, merges new actions into the list for session_id (appending).
+        - If the row does not exist, inserts a minimal row with page_actions as {session_id: actions}.
+        - Never overwrites other sessions' logs.
     """
     global PG_CONN, PG_CURSOR
     if not PG_CONN or not PG_CURSOR:
         if not connect_to_db():
             return False
 
-    try:
-        # First try to update existing row
-        PG_CURSOR.execute(
-            """
-            UPDATE page_embeddings
-            SET page_actions = %s::jsonb,
-                timestamp = %s,
-                session_id = COALESCE(%s, session_id)
-            WHERE url = %s
-            """,
-            (json.dumps(actions), time.time(), session_id, url)
-        )
+    if not url or not isinstance(actions, list) or len(actions) == 0:
+        # Nothing to write
+        return True
 
-        if PG_CURSOR.rowcount == 0:
-            # Insert a minimal row if not exists (embedding/content can be NULL)
+    try:
+        session_key = session_id or "session_unknown"
+
+        # Fetch existing page_actions (if any)
+        PG_CURSOR.execute(
+            "SELECT page_actions FROM page_embeddings WHERE url = %s",
+            (url,)
+        )
+        row = PG_CURSOR.fetchone()
+
+        new_actions_obj = {}
+        if row:
+            existing = row[0]
+            # Normalize existing to a dict keyed by session
+            if existing is None:
+                new_actions_obj = {session_key: actions}
+            elif isinstance(existing, list):
+                # Legacy format: entire column was a list; preserve under 'legacy_default'
+                new_actions_obj = {"legacy_default": existing, session_key: actions}
+            elif isinstance(existing, dict):
+                # Merge into existing, appending to the session list
+                new_actions_obj = existing
+                if session_key in new_actions_obj and isinstance(new_actions_obj[session_key], list):
+                    new_actions_obj[session_key].extend(actions)
+                else:
+                    new_actions_obj[session_key] = actions
+            else:
+                # Unknown format; replace with a safe object
+                new_actions_obj = {session_key: actions}
+
+            # Update row
             PG_CURSOR.execute(
                 """
-                INSERT INTO page_embeddings (url, embedding, content, content_type, timestamp, title, is_alert, session_id, page_actions)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                UPDATE page_embeddings
+                SET page_actions = %s,
+                    timestamp = %s,
+                    session_id = COALESCE(%s, session_id)
+                WHERE url = %s
+                """,
+                (Json(new_actions_obj), time.time(), session_id, url)
+            )
+        else:
+            # Insert minimal row with per-session actions
+            new_actions_obj = {session_key: actions}
+            PG_CURSOR.execute(
+                """
+                INSERT INTO page_embeddings
+                    (url, embedding, content, content_type, timestamp, title, is_alert, session_id, page_actions)
+                VALUES
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (url) DO NOTHING
                 """,
-                (url, None, None, 'html', time.time(), '', False, session_id, json.dumps(actions))
+                (url, None, None, 'html', time.time(), '', False, session_id, Json(new_actions_obj))
             )
 
         PG_CONN.commit()

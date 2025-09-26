@@ -883,10 +883,18 @@ def capture_web_actions():
 
 # Start the capture process
 def start_capturing(target_url):
-    global TARGET_WEBSITE, stop_capturing, capture_thread, all_windows
+    global TARGET_WEBSITE, stop_capturing, capture_thread, all_windows, page_action_logs
 
     TARGET_WEBSITE = target_url
     stop_capturing = False
+
+    # Reset per-URL accumulated actions when a new session starts.
+    # This prevents actions from previous flows from being mixed into the current flow.
+    try:
+        page_action_logs.clear()
+    except Exception:
+        # Fallback if somehow not initialized
+        page_action_logs = {}
 
     # Make sure we have a proper URL
     if not TARGET_WEBSITE.startswith(('http://', 'https://')):
